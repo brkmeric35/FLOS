@@ -1,0 +1,145 @@
+name: Build FlOS ISO
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Araçları Kur
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin mtools isolinux
+
+      - name: Debian Base Sistemi Oluştur
+        run: |
+          sudo debootstrap --arch=amd64 bookworm /mnt/flos http://deb.debian.org/debian
+
+      - name: Sistemi Yapılandır
+        run: |
+          # Temel dosyaları kopyala
+          sudo cp /etc/resolv.conf /mnt/flos/etc/resolv.conf
+
+          sudo chroot /mnt/flos /bin/bash -c "
+            # Paket listesini güncelle
+            apt-get update -qq
+
+            # Sadece neofetch ve temel araçları kur
+            apt-get install -y --no-install-recommends \
+              linux-image-amd64 \
+              grub-pc \
+              neofetch \
+              bash \
+              coreutils \
+              util-linux \
+              procps \
+              systemd \
+              systemd-sysv \
+              login \
+              passwd \
+              sudo \
+              openssh-server \
+              net-tools \
+              iproute2 \
+              open-vm-tools \
+              vim-tiny \
+              tmux \
+              ca-certificates
+
+            # OS adını FlOS olarak ayarla
+            echo 'PRETTY_NAME=\"FlOS\"'           > /etc/os-release
+            echo 'NAME=\"FlOS\"'                 >> /etc/os-release
+            echo 'VERSION=\"1.0\"'               >> /etc/os-release
+            echo 'ID=flos'                       >> /etc/os-release
+            echo 'ID_LIKE=debian'                >> /etc/os-release
+            echo 'VERSION_ID=\"1.0\"'            >> /etc/os-release
+            echo 'HOME_URL=\"https://github.com\"' >> /etc/os-release
+            echo 'LOGO=debian-logo'              >> /etc/os-release
+
+            # hostname
+            echo 'flos' > /etc/hostname
+
+            # neofetch için Debian logosu ve FlOS adı
+            mkdir -p /etc/neofetch
+            cat > /etc/neofetch/config.conf << 'NEOFETCH_CONF'
+  print_info() {
+      info title
+      info underline
+      info 'OS'         distro
+      info 'Host'       model
+      info 'Kernel'     kernel
+      info 'Uptime'     uptime
+      info 'Packages'   packages
+      info 'Shell'      shell
+      info 'CPU'        cpu
+      info 'Memory'     memory
+  }
+  distro_shorthand='off'
+  os_arch='on'
+  ascii_distro='Debian'
+  NEOFETCH_CONF
+
+            # Neofetch her login'de çalışsın
+            echo 'neofetch --config /etc/neofetch/config.conf' >> /etc/profile
+
+            # Root şifresi: flos
+            echo 'root:flos' | chpasswd
+
+            # Root otomatik login (tty1)
+            mkdir -p /etc/systemd/system/getty@tty1.service.d
+            cat > /etc/systemd/system/getty@tty1.service.d/override.conf << 'GETTY'
+  [Service]
+  ExecStart=
+  ExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM
+  GETTY
+
+            # fstab
+            cat > /etc/fstab << 'FSTAB'
+  /dev/sda1  /     ext4  errors=remount-ro  0  1
+  /dev/sda2  none  swap  sw                 0  0
+  FSTAB
+
+            # locales
+            echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
+            locale-gen
+            echo 'LANG=en_US.UTF-8' > /etc/locale.conf
+          "
+
+      - name: SquashFS Oluştur
+        run: |
+          mkdir -p iso_root/live
+          sudo mksquashfs /mnt/flos iso_root/live/filesystem.squashfs -comp xz -noappend
+
+      - name: Kernel ve Initrd Kopyala
+        run: |
+          mkdir -p iso_root/boot/grub
+          KERNEL=$(ls /mnt/flos/boot/vmlinuz-* | head -1)
+          INITRD=$(ls /mnt/flos/boot/initrd.img-* | head -1)
+          sudo cp "$KERNEL" iso_root/boot/vmlinuz
+          sudo cp "$INITRD" iso_root/boot/initrd.img
+
+      - name: GRUB Konfigürasyonu
+        run: |
+          cat > iso_root/boot/grub/grub.cfg << 'GRUBCFG'
+          set default=0
+          set timeout=3
+
+          menuentry "FlOS" {
+              linux  /boot/vmlinuz boot=live quiet splash
+              initrd /boot/initrd.img
+          }
+          GRUBCFG
+
+      - name: ISO Oluştur
+        run: |
+          sudo grub-mkrescue -o FlOS.iso iso_root -- -volid "FlOS" 2>&1
+
+      - name: ISO'yu Artifact Olarak Yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlOS-ISO
+          path: FlOS.iso
+          retention-days: 7
