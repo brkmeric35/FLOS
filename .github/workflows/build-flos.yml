@@ -25,7 +25,7 @@ jobs:
           sudo chroot /mnt/flos apt-get install -y --no-install-recommends \
             linux-image-amd64 grub-pc neofetch bash coreutils util-linux \
             procps systemd systemd-sysv login passwd sudo openssh-server \
-            net-tools iproute2 open-vm-tools vim-tiny tmux ca-certificates
+            net-tools iproute2 open-vm-tools vim-tiny tmux ca-certificates locales
 
       - name: OS Adini FlOS Yap
         run: |
