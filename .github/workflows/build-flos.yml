@@ -29,16 +29,11 @@ jobs:
       - name: Paketleri Kur
         run: |
           sudo cp /etc/resolv.conf /mnt/flos/etc/resolv.conf
-
-          # sources.list ayarla
           sudo tee /mnt/flos/etc/apt/sources.list > /dev/null << 'EOF'
           deb http://deb.debian.org/debian bookworm main contrib non-free
           deb http://deb.debian.org/debian bookworm-updates main contrib non-free
           EOF
-
           sudo chroot /mnt/flos apt-get update -qq
-
-          # live-boot kritik paket!
           sudo chroot /mnt/flos apt-get install -y \
             linux-image-amd64 \
             live-boot \
@@ -63,11 +58,9 @@ jobs:
         run: |
           printf 'PRETTY_NAME="FlOS"\nNAME="FlOS"\nVERSION="1.0"\nID=flos\nID_LIKE=debian\nVERSION_ID="1.0"\nLOGO=debian-logo\n' | sudo tee /mnt/flos/etc/os-release
 
-      - name: Hostname
-        run: echo 'flos' | sudo tee /mnt/flos/etc/hostname
-
-      - name: Hosts Dosyasi
+      - name: Hostname ve Hosts
         run: |
+          echo 'flos' | sudo tee /mnt/flos/etc/hostname
           printf '127.0.0.1\tlocalhost\n127.0.1.1\tflos\n' | sudo tee /mnt/flos/etc/hosts
 
       - name: Neofetch Yapilandir
@@ -90,12 +83,9 @@ jobs:
           NEOF
           echo 'neofetch --config /etc/neofetch/config.conf' | sudo tee -a /mnt/flos/etc/bash.bashrc
 
-      - name: Root Sifre
+      - name: Root Sifre ve Autologin
         run: |
           sudo chroot /mnt/flos /bin/bash -c "echo 'root:flos' | chpasswd"
-
-      - name: Autologin root tty1
-        run: |
           sudo mkdir -p "/mnt/flos/etc/systemd/system/getty@tty1.service.d"
           sudo tee "/mnt/flos/etc/systemd/system/getty@tty1.service.d/override.conf" > /dev/null << 'EOF'
           [Service]
@@ -115,7 +105,7 @@ jobs:
 
       - name: ISO Dizin Yapisi
         run: |
-          mkdir -p iso_root/{live,boot/grub,EFI/boot}
+          mkdir -p iso_root/{live,boot/grub}
 
       - name: SquashFS Olustur
         run: |
@@ -147,13 +137,7 @@ jobs:
 
       - name: ISO Olustur
         run: |
-          sudo grub-mkrescue \
-            -o FlOS.iso \
-            iso_root \
-            -- \
-            -volid "FlOS" \
-            -joliet \
-            -rational-rock
+          sudo grub-mkrescue -o FlOS.iso iso_root
 
       - name: ISO Boyutu
         run: ls -lh FlOS.iso
