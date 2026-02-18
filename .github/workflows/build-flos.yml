@@ -12,7 +12,15 @@ jobs:
       - name: Araclari Kur
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin mtools isolinux
+          sudo apt-get install -y \
+            debootstrap \
+            xorriso \
+            squashfs-tools \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            mtools \
+            isolinux \
+            syslinux-common
 
       - name: Debian Base Sistem
         run: |
@@ -21,55 +29,134 @@ jobs:
       - name: Paketleri Kur
         run: |
           sudo cp /etc/resolv.conf /mnt/flos/etc/resolv.conf
+
+          # sources.list ayarla
+          sudo tee /mnt/flos/etc/apt/sources.list > /dev/null << 'EOF'
+          deb http://deb.debian.org/debian bookworm main contrib non-free
+          deb http://deb.debian.org/debian bookworm-updates main contrib non-free
+          EOF
+
           sudo chroot /mnt/flos apt-get update -qq
-          sudo chroot /mnt/flos apt-get install -y --no-install-recommends \
-            linux-image-amd64 grub-pc neofetch bash coreutils util-linux \
-            procps systemd systemd-sysv login passwd sudo openssh-server \
-            net-tools iproute2 open-vm-tools vim-tiny tmux ca-certificates locales
+
+          # live-boot kritik paket!
+          sudo chroot /mnt/flos apt-get install -y \
+            linux-image-amd64 \
+            live-boot \
+            live-boot-initramfs-tools \
+            systemd-sysv \
+            bash \
+            neofetch \
+            locales \
+            login \
+            passwd \
+            sudo \
+            openssh-server \
+            net-tools \
+            iproute2 \
+            open-vm-tools \
+            vim-tiny \
+            tmux \
+            ca-certificates \
+            dbus
 
       - name: OS Adini FlOS Yap
         run: |
           printf 'PRETTY_NAME="FlOS"\nNAME="FlOS"\nVERSION="1.0"\nID=flos\nID_LIKE=debian\nVERSION_ID="1.0"\nLOGO=debian-logo\n' | sudo tee /mnt/flos/etc/os-release
 
-      - name: Hostname Ayarla
+      - name: Hostname
         run: echo 'flos' | sudo tee /mnt/flos/etc/hostname
+
+      - name: Hosts Dosyasi
+        run: |
+          printf '127.0.0.1\tlocalhost\n127.0.1.1\tflos\n' | sudo tee /mnt/flos/etc/hosts
 
       - name: Neofetch Yapilandir
         run: |
           sudo mkdir -p /mnt/flos/etc/neofetch
-          printf "print_info() {\n    info title\n    info underline\n    info 'OS' distro\n    info 'Kernel' kernel\n    info 'Uptime' uptime\n    info 'Packages' packages\n    info 'Shell' shell\n    info 'CPU' cpu\n    info 'Memory' memory\n}\nascii_distro='Debian'\ndistro_shorthand='off'\n" | sudo tee /mnt/flos/etc/neofetch/config.conf
-          echo 'neofetch --config /etc/neofetch/config.conf' | sudo tee -a /mnt/flos/etc/profile
+          sudo tee /mnt/flos/etc/neofetch/config.conf > /dev/null << 'NEOF'
+          print_info() {
+              info title
+              info underline
+              info "OS" distro
+              info "Kernel" kernel
+              info "Uptime" uptime
+              info "Packages" packages
+              info "Shell" shell
+              info "CPU" cpu
+              info "Memory" memory
+          }
+          ascii_distro="Debian"
+          distro_shorthand="off"
+          NEOF
+          echo 'neofetch --config /etc/neofetch/config.conf' | sudo tee -a /mnt/flos/etc/bash.bashrc
 
-      - name: Root Sifre ve Autologin
+      - name: Root Sifre
         run: |
           sudo chroot /mnt/flos /bin/bash -c "echo 'root:flos' | chpasswd"
-          sudo mkdir -p "/mnt/flos/etc/systemd/system/getty@tty1.service.d"
-          printf '[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin root --noclear %%I $TERM\n' | sudo tee "/mnt/flos/etc/systemd/system/getty@tty1.service.d/override.conf"
 
-      - name: fstab ve Locale
+      - name: Autologin root tty1
         run: |
-          printf '/dev/sda1  /     ext4  errors=remount-ro  0  1\n/dev/sda2  none  swap  sw  0  0\n' | sudo tee /mnt/flos/etc/fstab
+          sudo mkdir -p "/mnt/flos/etc/systemd/system/getty@tty1.service.d"
+          sudo tee "/mnt/flos/etc/systemd/system/getty@tty1.service.d/override.conf" > /dev/null << 'EOF'
+          [Service]
+          ExecStart=
+          ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
+          EOF
+
+      - name: Locale
+        run: |
           echo 'en_US.UTF-8 UTF-8' | sudo tee /mnt/flos/etc/locale.gen
           sudo chroot /mnt/flos locale-gen
           echo 'LANG=en_US.UTF-8' | sudo tee /mnt/flos/etc/locale.conf
 
+      - name: Initramfs Guncelle
+        run: |
+          sudo chroot /mnt/flos update-initramfs -u -k all
+
+      - name: ISO Dizin Yapisi
+        run: |
+          mkdir -p iso_root/{live,boot/grub,EFI/boot}
+
       - name: SquashFS Olustur
         run: |
-          mkdir -p iso_root/live
-          sudo mksquashfs /mnt/flos iso_root/live/filesystem.squashfs -comp xz -noappend
+          sudo mksquashfs /mnt/flos iso_root/live/filesystem.squashfs \
+            -e boot \
+            -comp xz \
+            -noappend
 
       - name: Kernel ve Initrd Kopyala
         run: |
-          mkdir -p iso_root/boot/grub
-          sudo cp $(ls /mnt/flos/boot/vmlinuz-* | head -1) iso_root/boot/vmlinuz
-          sudo cp $(ls /mnt/flos/boot/initrd.img-* | head -1) iso_root/boot/initrd.img
+          VMLINUZ=$(ls /mnt/flos/boot/vmlinuz-* | sort | tail -1)
+          INITRD=$(ls /mnt/flos/boot/initrd.img-* | sort | tail -1)
+          sudo cp "$VMLINUZ" iso_root/live/vmlinuz
+          sudo cp "$INITRD" iso_root/live/initrd.img
+          echo "Kernel: $VMLINUZ"
+          echo "Initrd: $INITRD"
 
       - name: GRUB Config
         run: |
-          printf 'set default=0\nset timeout=3\nmenuentry "FlOS" {\n    linux  /boot/vmlinuz boot=live quiet\n    initrd /boot/initrd.img\n}\n' | sudo tee iso_root/boot/grub/grub.cfg
+          sudo tee iso_root/boot/grub/grub.cfg > /dev/null << 'EOF'
+          set default=0
+          set timeout=5
+
+          menuentry "FlOS" {
+              linux  /live/vmlinuz boot=live components quiet
+              initrd /live/initrd.img
+          }
+          EOF
 
       - name: ISO Olustur
-        run: sudo grub-mkrescue -o FlOS.iso iso_root -- -volid "FlOS"
+        run: |
+          sudo grub-mkrescue \
+            -o FlOS.iso \
+            iso_root \
+            -- \
+            -volid "FlOS" \
+            -joliet \
+            -rational-rock
+
+      - name: ISO Boyutu
+        run: ls -lh FlOS.iso
 
       - name: ISO Yukle
         uses: actions/upload-artifact@v4
