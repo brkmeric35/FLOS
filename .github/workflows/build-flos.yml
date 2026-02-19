@@ -1,4 +1,4 @@
-name: Build FlOS KDE Plasma ISO
+name: Build FlOS KDE ISO
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 90
 
     steps:
       - name: Araclari Kur
@@ -16,14 +16,15 @@ jobs:
             debootstrap xorriso squashfs-tools \
             grub-pc-bin grub-efi-amd64-bin mtools isolinux syslinux-common
 
-      - name: Debian Base Sistem (sid)
+      - name: Debian Base Sistem
         run: |
-          sudo debootstrap --arch=amd64 sid /mnt/flos http://deb.debian.org/debian
+          sudo debootstrap --arch=amd64 bookworm /mnt/flos http://deb.debian.org/debian
 
       - name: Sources List
         run: |
           sudo tee /mnt/flos/etc/apt/sources.list > /dev/null << 'EOF'
-          deb http://deb.debian.org/debian sid main contrib non-free non-free-firmware
+          deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+          deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
           EOF
 
       - name: Temel Paketleri Kur
@@ -48,25 +49,25 @@ jobs:
             tmux \
             fastfetch \
             open-vm-tools \
-            open-vm-tools-desktop
+            open-vm-tools-desktop \
+            xserver-xorg \
+            xorg
 
       - name: KDE Plasma Kur
         run: |
-          # --no-install-recommends seçeneği ISO boyutunu küçük tutar. 
-          # Tam deneyim için 'kde-standard' veya 'kde-full' kullanabilirsiniz.
           sudo chroot /mnt/flos apt-get install -y \
             kde-plasma-desktop \
             sddm \
             konsole \
             dolphin \
+            kate \
             ark \
             gwenview \
-            packagekit \
-            pipewire \
-            pipewire-audio \
-            wireplumber \
-            network-manager-gnome \
-            plasma-nm
+            plasma-nm \
+            plasma-pa \
+            kde-spectacle \
+            fonts-noto \
+            papirus-icon-theme
 
       - name: OS Adini FlOS Yap
         run: |
@@ -85,6 +86,15 @@ jobs:
             echo 'root:flos' | chpasswd
           "
 
+      - name: SDDM Otomatik Giris
+        run: |
+          sudo mkdir -p /mnt/flos/etc/sddm.conf.d
+          sudo tee /mnt/flos/etc/sddm.conf.d/autologin.conf > /dev/null << 'EOF'
+          [Autologin]
+          User=user
+          Session=plasma
+          EOF
+
       - name: Fastfetch Yapilandir
         run: |
           sudo mkdir -p /mnt/flos/home/user/.config/fastfetch
@@ -95,9 +105,9 @@ jobs:
           }
           EOF
           echo 'fastfetch' | sudo tee -a /mnt/flos/etc/bash.bashrc
-          sudo chroot /mnt/flos chown -R user:user /home/user/.config/fastfetch
+          sudo chroot /mnt/flos chown -R user:user /home/user/.config
 
-      - name: Servisleri Etkinlestir
+      - name: SDDM ve NetworkManager Etkinlestir
         run: |
           sudo chroot /mnt/flos systemctl enable sddm
           sudo chroot /mnt/flos systemctl enable NetworkManager
@@ -131,13 +141,16 @@ jobs:
           set default=0
           set timeout=5
           menuentry "FlOS - KDE Plasma" {
-              linux  /live/vmlinuz boot=live components quiet splash
+              linux  /live/vmlinuz boot=live components quiet
               initrd /live/initrd.img
           }
           EOF
 
       - name: ISO Olustur
         run: sudo grub-mkrescue -o FlOS-KDE.iso iso_root
+
+      - name: ISO Boyutu
+        run: ls -lh FlOS-KDE.iso
 
       - name: ISO Yukle
         uses: actions/upload-artifact@v4
