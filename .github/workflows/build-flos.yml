@@ -13,24 +13,17 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
-            debootstrap \
-            xorriso \
-            squashfs-tools \
-            grub-pc-bin \
-            grub-efi-amd64-bin \
-            mtools \
-            isolinux \
-            syslinux-common
+            debootstrap xorriso squashfs-tools \
+            grub-pc-bin grub-efi-amd64-bin mtools isolinux syslinux-common
 
-      - name: Debian Base Sistem
+      - name: Debian Base Sistem (sid)
         run: |
-          sudo debootstrap --arch=amd64 trixie /mnt/flos http://deb.debian.org/debian
+          sudo debootstrap --arch=amd64 sid /mnt/flos http://deb.debian.org/debian
 
       - name: Sources List
         run: |
           sudo tee /mnt/flos/etc/apt/sources.list > /dev/null << 'EOF'
-          deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
-          deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware
+          deb http://deb.debian.org/debian sid main contrib non-free non-free-firmware
           EOF
 
       - name: Temel Paketleri Kur
@@ -69,9 +62,6 @@ jobs:
             grim \
             slurp \
             mako-notifier \
-            polkit-kde-agent-1 \
-            qt5-wayland \
-            qt6-wayland \
             pipewire \
             pipewire-pulse \
             wireplumber \
@@ -79,6 +69,8 @@ jobs:
             papirus-icon-theme \
             thunar \
             sddm \
+            polkit-kde-agent-1 \
+            qt6-wayland \
             network-manager-gnome
 
       - name: OS Adini FlOS Yap
@@ -177,8 +169,6 @@ jobs:
 
           bindm = $mainMod, mouse:272, movewindow
           bindm = $mainMod, mouse:273, resizewindow
-
-          bind = , Print, exec, grim -g "$(slurp)" ~/screenshot.png
           EOF
           sudo chroot /mnt/flos chown -R user:user /home/user/.config
 
@@ -213,18 +203,7 @@ jobs:
           sudo tee /mnt/flos/home/user/.config/fastfetch/config.jsonc > /dev/null << 'EOF'
           {
             "logo": { "source": "debian" },
-            "display": { "separator": " -> " },
-            "modules": [
-              { "type": "title", "key": "FlOS" },
-              "separator",
-              "os",
-              "kernel",
-              "uptime",
-              "packages",
-              "shell",
-              "cpu",
-              "memory"
-            ]
+            "modules": ["os","kernel","uptime","packages","shell","cpu","memory"]
           }
           EOF
           echo 'fastfetch' | sudo tee -a /mnt/flos/etc/bash.bashrc
@@ -246,22 +225,17 @@ jobs:
           sudo chroot /mnt/flos update-initramfs -u -k all
 
       - name: ISO Dizin Yapisi
-        run: |
-          mkdir -p iso_root/{live,boot/grub}
+        run: mkdir -p iso_root/{live,boot/grub}
 
       - name: SquashFS Olustur
         run: |
           sudo mksquashfs /mnt/flos iso_root/live/filesystem.squashfs \
-            -e boot \
-            -comp xz \
-            -noappend
+            -e boot -comp xz -noappend
 
       - name: Kernel ve Initrd Kopyala
         run: |
-          VMLINUZ=$(ls /mnt/flos/boot/vmlinuz-* | sort | tail -1)
-          INITRD=$(ls /mnt/flos/boot/initrd.img-* | sort | tail -1)
-          sudo cp "$VMLINUZ" iso_root/live/vmlinuz
-          sudo cp "$INITRD" iso_root/live/initrd.img
+          sudo cp $(ls /mnt/flos/boot/vmlinuz-* | sort | tail -1) iso_root/live/vmlinuz
+          sudo cp $(ls /mnt/flos/boot/initrd.img-* | sort | tail -1) iso_root/live/initrd.img
 
       - name: GRUB Config
         run: |
@@ -275,8 +249,7 @@ jobs:
           EOF
 
       - name: ISO Olustur
-        run: |
-          sudo grub-mkrescue -o FlOS-Hyprland.iso iso_root
+        run: sudo grub-mkrescue -o FlOS-Hyprland.iso iso_root
 
       - name: ISO Boyutu
         run: ls -lh FlOS-Hyprland.iso
