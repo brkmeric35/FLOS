@@ -45,13 +45,8 @@ jobs:
             ca-certificates \
             network-manager \
             openssh-server \
-            vim-tiny \
-            tmux \
-            fastfetch \
             open-vm-tools \
-            open-vm-tools-desktop \
-            xserver-xorg \
-            xorg
+            open-vm-tools-desktop
 
       - name: KDE Plasma Kur
         run: |
@@ -65,9 +60,11 @@ jobs:
             gwenview \
             plasma-nm \
             plasma-pa \
-            kde-spectacle \
+            kscreen \
+            firefox-esr \
             fonts-noto \
-            papirus-icon-theme
+            papirus-icon-theme \
+            screenfetch
 
       - name: OS Adini FlOS Yap
         run: |
@@ -81,7 +78,7 @@ jobs:
       - name: Kullanici Olustur
         run: |
           sudo chroot /mnt/flos /bin/bash -c "
-            useradd -m -s /bin/bash -G sudo,video,audio,input,render user
+            useradd -m -s /bin/bash -G sudo,video,audio,input,netdev user
             echo 'user:flos' | chpasswd
             echo 'root:flos' | chpasswd
           "
@@ -95,17 +92,20 @@ jobs:
           Session=plasma
           EOF
 
-      - name: Fastfetch Yapilandir
+      - name: Klavye Ayari
         run: |
-          sudo mkdir -p /mnt/flos/home/user/.config/fastfetch
-          sudo tee /mnt/flos/home/user/.config/fastfetch/config.jsonc > /dev/null << 'EOF'
-          {
-            "logo": { "source": "debian" },
-            "modules": ["os","kernel","uptime","packages","shell","cpu","memory"]
-          }
+          sudo mkdir -p /mnt/flos/etc/X11/xorg.conf.d
+          sudo tee /mnt/flos/etc/X11/xorg.conf.d/00-keyboard.conf > /dev/null << 'EOF'
+          Section "InputClass"
+              Identifier "keyboard"
+              MatchIsKeyboard "yes"
+              Option "XkbLayout" "tr"
+          EndSection
           EOF
-          echo 'fastfetch' | sudo tee -a /mnt/flos/etc/bash.bashrc
-          sudo chroot /mnt/flos chown -R user:user /home/user/.config
+
+      - name: Screenfetch Yapilandir
+        run: |
+          echo 'screenfetch -D "Debian"' | sudo tee -a /mnt/flos/etc/bash.bashrc
 
       - name: SDDM ve NetworkManager Etkinlestir
         run: |
