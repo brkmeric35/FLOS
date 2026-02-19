@@ -1,4 +1,4 @@
-name: Build FlOS ISO
+name: Build FlOS Hyprland ISO
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Araclari Kur
@@ -22,37 +22,68 @@ jobs:
             isolinux \
             syslinux-common
 
-      - name: Debian Base Sistem
+      - name: Debian Base Sistem (trixie - Hyprland icin)
         run: |
-          sudo debootstrap --arch=amd64 bookworm /mnt/flos http://deb.debian.org/debian
+          sudo debootstrap --arch=amd64 trixie /mnt/flos http://deb.debian.org/debian
 
-      - name: Paketleri Kur
+      - name: Sources List
+        run: |
+          sudo tee /mnt/flos/etc/apt/sources.list > /dev/null << 'EOF'
+          deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+          deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware
+          EOF
+
+      - name: Temel Paketleri Kur
         run: |
           sudo cp /etc/resolv.conf /mnt/flos/etc/resolv.conf
-          sudo tee /mnt/flos/etc/apt/sources.list > /dev/null << 'EOF'
-          deb http://deb.debian.org/debian bookworm main contrib non-free
-          deb http://deb.debian.org/debian bookworm-updates main contrib non-free
-          EOF
           sudo chroot /mnt/flos apt-get update -qq
           sudo chroot /mnt/flos apt-get install -y \
             linux-image-amd64 \
             live-boot \
             live-boot-initramfs-tools \
             systemd-sysv \
-            bash \
-            neofetch \
+            dbus \
             locales \
             login \
             passwd \
             sudo \
+            bash \
+            ca-certificates \
+            network-manager \
             openssh-server \
-            net-tools \
-            iproute2 \
-            open-vm-tools \
             vim-tiny \
             tmux \
-            ca-certificates \
-            dbus
+            neofetch \
+            open-vm-tools \
+            open-vm-tools-desktop
+
+      - name: Hyprland ve Wayland Kur
+        run: |
+          sudo chroot /mnt/flos apt-get install -y \
+            hyprland \
+            xdg-desktop-portal-hyprland \
+            waybar \
+            kitty \
+            wofi \
+            wl-clipboard \
+            grim \
+            slurp \
+            mako-notifier \
+            polkit-kde-agent-1 \
+            qt5-wayland \
+            qt6-wayland \
+            pipewire \
+            pipewire-pulse \
+            wireplumber \
+            fonts-noto \
+            fonts-noto-cjk \
+            papirus-icon-theme \
+            thunar \
+            greybird-gtk-theme
+
+      - name: SDDM Display Manager Kur
+        run: |
+          sudo chroot /mnt/flos apt-get install -y sddm
 
       - name: OS Adini FlOS Yap
         run: |
@@ -62,6 +93,144 @@ jobs:
         run: |
           echo 'flos' | sudo tee /mnt/flos/etc/hostname
           printf '127.0.0.1\tlocalhost\n127.0.1.1\tflos\n' | sudo tee /mnt/flos/etc/hosts
+
+      - name: Kullanici Olustur
+        run: |
+          sudo chroot /mnt/flos /bin/bash -c "
+            useradd -m -s /bin/bash -G sudo,video,audio,input,render user
+            echo 'user:flos' | chpasswd
+            echo 'root:flos' | chpasswd
+          "
+
+      - name: Hyprland Konfig
+        run: |
+          sudo mkdir -p /mnt/flos/home/user/.config/hypr
+          sudo tee /mnt/flos/home/user/.config/hypr/hyprland.conf > /dev/null << 'EOF'
+          # FlOS - Hyprland Config
+
+          monitor=,preferred,auto,1
+
+          exec-once = waybar
+          exec-once = mako
+          exec-once = /usr/lib/polkit-kde-authentication-agent-1
+          exec-once = pipewire
+          exec-once = wireplumber
+          exec-once = nm-applet --indicator
+
+          input {
+              kb_layout = tr
+              follow_mouse = 1
+              touchpad {
+                  natural_scroll = true
+              }
+          }
+
+          general {
+              gaps_in = 5
+              gaps_out = 10
+              border_size = 2
+              col.active_border = rgba(89b4faee) rgba(cba6f7ee) 45deg
+              col.inactive_border = rgba(595959aa)
+              layout = dwindle
+          }
+
+          decoration {
+              rounding = 10
+              blur {
+                  enabled = true
+                  size = 5
+                  passes = 2
+              }
+              drop_shadow = true
+              shadow_range = 10
+              shadow_render_power = 3
+          }
+
+          animations {
+              enabled = true
+              bezier = myBezier, 0.05, 0.9, 0.1, 1.05
+              animation = windows, 1, 5, myBezier
+              animation = windowsOut, 1, 7, default, popin 80%
+              animation = fade, 1, 7, default
+              animation = workspaces, 1, 6, default
+          }
+
+          dwindle {
+              pseudotile = true
+              preserve_split = true
+          }
+
+          # Temel Kisayollar
+          $mainMod = SUPER
+
+          bind = $mainMod, Return, exec, kitty
+          bind = $mainMod, Q, killactive,
+          bind = $mainMod, M, exit,
+          bind = $mainMod, E, exec, thunar
+          bind = $mainMod, Space, exec, wofi --show drun
+          bind = $mainMod, F, fullscreen,
+          bind = $mainMod, V, togglefloating,
+
+          bind = $mainMod, 1, workspace, 1
+          bind = $mainMod, 2, workspace, 2
+          bind = $mainMod, 3, workspace, 3
+          bind = $mainMod, 4, workspace, 4
+          bind = $mainMod, 5, workspace, 5
+
+          bind = $mainMod SHIFT, 1, movetoworkspace, 1
+          bind = $mainMod SHIFT, 2, movetoworkspace, 2
+          bind = $mainMod SHIFT, 3, movetoworkspace, 3
+          bind = $mainMod SHIFT, 4, movetoworkspace, 4
+          bind = $mainMod SHIFT, 5, movetoworkspace, 5
+
+          bind = $mainMod, h, movefocus, l
+          bind = $mainMod, l, movefocus, r
+          bind = $mainMod, k, movefocus, u
+          bind = $mainMod, j, movefocus, d
+
+          bindm = $mainMod, mouse:272, movewindow
+          bindm = $mainMod, mouse:273, resizewindow
+
+          # Ekran goruntusu
+          bind = , Print, exec, grim -g "$(slurp)" ~/screenshot.png
+          EOF
+
+          sudo chroot /mnt/flos chown -R user:user /home/user/.config
+
+      - name: Waybar Konfig
+        run: |
+          sudo mkdir -p /mnt/flos/home/user/.config/waybar
+          sudo tee /mnt/flos/home/user/.config/waybar/config > /dev/null << 'EOF'
+          {
+              "layer": "top",
+              "position": "top",
+              "height": 35,
+              "modules-left": ["hyprland/workspaces"],
+              "modules-center": ["clock"],
+              "modules-right": ["pulseaudio", "network", "cpu", "memory", "battery"],
+              "hyprland/workspaces": {
+                  "format": "{id}"
+              },
+              "clock": {
+                  "format": "{:%H:%M  %d.%m.%Y}"
+              },
+              "cpu": {
+                  "format": " {usage}%"
+              },
+              "memory": {
+                  "format": " {}%"
+              },
+              "network": {
+                  "format-wifi": " {signalStrength}%",
+                  "format-ethernet": " connected",
+                  "format-disconnected": "disconnected"
+              },
+              "pulseaudio": {
+                  "format": " {volume}%"
+              }
+          }
+          EOF
+          sudo chroot /mnt/flos chown -R user:user /home/user/.config/waybar
 
       - name: Neofetch Yapilandir
         run: |
@@ -83,15 +252,10 @@ jobs:
           NEOF
           echo 'neofetch --config /etc/neofetch/config.conf' | sudo tee -a /mnt/flos/etc/bash.bashrc
 
-      - name: Root Sifre ve Autologin
+      - name: SDDM Otomatik Baslat
         run: |
-          sudo chroot /mnt/flos /bin/bash -c "echo 'root:flos' | chpasswd"
-          sudo mkdir -p "/mnt/flos/etc/systemd/system/getty@tty1.service.d"
-          sudo tee "/mnt/flos/etc/systemd/system/getty@tty1.service.d/override.conf" > /dev/null << 'EOF'
-          [Service]
-          ExecStart=
-          ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
-          EOF
+          sudo chroot /mnt/flos systemctl enable sddm
+          sudo chroot /mnt/flos systemctl enable NetworkManager
 
       - name: Locale
         run: |
@@ -120,8 +284,6 @@ jobs:
           INITRD=$(ls /mnt/flos/boot/initrd.img-* | sort | tail -1)
           sudo cp "$VMLINUZ" iso_root/live/vmlinuz
           sudo cp "$INITRD" iso_root/live/initrd.img
-          echo "Kernel: $VMLINUZ"
-          echo "Initrd: $INITRD"
 
       - name: GRUB Config
         run: |
@@ -129,7 +291,7 @@ jobs:
           set default=0
           set timeout=5
 
-          menuentry "FlOS" {
+          menuentry "FlOS - Hyprland" {
               linux  /live/vmlinuz boot=live components quiet
               initrd /live/initrd.img
           }
@@ -137,14 +299,14 @@ jobs:
 
       - name: ISO Olustur
         run: |
-          sudo grub-mkrescue -o FlOS.iso iso_root
+          sudo grub-mkrescue -o FlOS-Hyprland.iso iso_root
 
       - name: ISO Boyutu
-        run: ls -lh FlOS.iso
+        run: ls -lh FlOS-Hyprland.iso
 
       - name: ISO Yukle
         uses: actions/upload-artifact@v4
         with:
-          name: FlOS-ISO
-          path: FlOS.iso
+          name: FlOS-Hyprland-ISO
+          path: FlOS-Hyprland.iso
           retention-days: 7
