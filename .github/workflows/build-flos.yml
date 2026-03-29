@@ -53,9 +53,9 @@ jobs:
             plymouth \
             plymouth-themes \
             grub-pc \
-            grub-efi-amd64 \
-            grub2-common \
-            os-prober
+            parted \
+            os-prober \
+            efibootmgr
 
       - name: KDE Plasma Kur
         run: |
@@ -77,9 +77,7 @@ jobs:
             calamares \
             calamares-settings-debian \
             python3 \
-            python3-yaml \
-            parted \
-            efibootmgr
+            python3-yaml
 
       - name: Debian Markasini Kaldir
         run: |
@@ -291,7 +289,6 @@ jobs:
           username: user
           EOF
 
-          # DUZELTILMIS bootloader konfig - hem BIOS hem EFI destegi
           sudo tee /mnt/flos/etc/calamares/modules/bootloader.conf > /dev/null << 'EOF'
           efiBootLoader: "grub"
           kernel: "/vmlinuz"
@@ -304,12 +301,10 @@ jobs:
           grubCfg: "/boot/grub/grub.cfg"
           grubProbe: "grub-probe"
           efiBootMgr: "efibootmgr"
-          installEFI: true
+          installEFI: false
           canBeResized: true
-          allowManualPartitioning: true
           EOF
 
-          # grubcfg modulu - FlOS icin
           sudo tee /mnt/flos/etc/calamares/modules/grubcfg.conf > /dev/null << 'EOF'
           overwrite: true
           keepDistributor: false
