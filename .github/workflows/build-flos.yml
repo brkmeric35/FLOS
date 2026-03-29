@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - name: Repoyu Cek (logo icin)
+      - name: Repoyu Cek
         uses: actions/checkout@v4
 
       - name: Araclari Kur
@@ -51,7 +51,11 @@ jobs:
             open-vm-tools \
             open-vm-tools-desktop \
             plymouth \
-            plymouth-themes
+            plymouth-themes \
+            grub-pc \
+            grub-efi-amd64 \
+            grub2-common \
+            os-prober
 
       - name: KDE Plasma Kur
         run: |
@@ -75,29 +79,21 @@ jobs:
             python3 \
             python3-yaml \
             parted \
-            os-prober \
-            grub-pc
+            efibootmgr
 
       - name: Debian Markasini Kaldir
         run: |
           sudo chroot /mnt/flos apt-get remove -y desktop-base 2>/dev/null || true
           sudo rm -rf /mnt/flos/usr/share/desktop-base 2>/dev/null || true
 
-      - name: Logo ve Duvar Kagidi Hazirla
+      - name: Logo ve Duvar Kagidi
         run: |
-          # Logoyu repodan al
           cp flos-logo.png /tmp/flos-logo.png
-
-          # Duvar kagidi: siyah zemin + logo ortada
           convert -size 1920x1080 xc:#0d1117 \
             \( /tmp/flos-logo.png -resize 400x400 \) \
-            -gravity center -composite \
-            /tmp/flos-wallpaper.png
-
-          # Plymouth icin kucuk logo
+            -gravity center -composite /tmp/flos-wallpaper.png
           convert /tmp/flos-logo.png -resize 256x256 /tmp/flos-plymouth.png
 
-          # Sisteme kopyala
           sudo mkdir -p /mnt/flos/usr/share/pixmaps
           sudo mkdir -p /mnt/flos/usr/share/backgrounds
           sudo mkdir -p /mnt/flos/usr/share/calamares/branding/flos
@@ -125,21 +121,18 @@ jobs:
         run: |
           sudo mkdir -p /mnt/flos/usr/share/plymouth/themes/flos
           sudo cp /tmp/flos-plymouth.png /mnt/flos/usr/share/plymouth/themes/flos/flos.png
-
           sudo tee /mnt/flos/usr/share/plymouth/themes/flos/flos.plymouth > /dev/null << 'EOF'
           [Plymouth Theme]
           Name=FlOS
           Description=FlOS 1 Boot Theme
           ModuleName=script
           EOF
-
           sudo tee /mnt/flos/usr/share/plymouth/themes/flos/flos.script > /dev/null << 'EOF'
           bg = SpriteImage(Image.Scale(Image("flos.png"), 300, 300));
           s = Sprite(bg);
           s.SetX(Window.GetWidth() / 2 - 150);
           s.SetY(Window.GetHeight() / 2 - 150);
           EOF
-
           sudo chroot /mnt/flos /bin/bash -c "
             update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/flos/flos.plymouth 100 2>/dev/null || true
           "
@@ -160,7 +153,6 @@ jobs:
           ${c2}    ':::::::::::::::::'
           ${c2}       ':::::::::::'
           EOF
-
           sudo tee /mnt/flos/etc/neofetch/config.conf > /dev/null << 'EOF'
           print_info() {
               info title
@@ -179,12 +171,11 @@ jobs:
           title_fqdn="off"
           distro_shorthand="off"
           EOF
-
           sudo tee -a /mnt/flos/etc/bash.bashrc > /dev/null << 'EOF'
           neofetch --ascii /etc/neofetch/flos.ascii --ascii_colors 2 15 --config /etc/neofetch/config.conf
           EOF
 
-      - name: KDE Duvar Kagidi Ayarla
+      - name: KDE Duvar Kagidi
         run: |
           sudo mkdir -p /mnt/flos/etc/skel/.config
           sudo tee /mnt/flos/etc/skel/.config/plasma-org.kde.plasma.desktop-appletsrc > /dev/null << 'EOF'
@@ -300,10 +291,12 @@ jobs:
           username: user
           EOF
 
+          # DUZELTILMIS bootloader konfig - hem BIOS hem EFI destegi
           sudo tee /mnt/flos/etc/calamares/modules/bootloader.conf > /dev/null << 'EOF'
           efiBootLoader: "grub"
           kernel: "/vmlinuz"
           img: "/initrd.img"
+          fallback: "/initrd.img"
           kernelLine: " quiet splash"
           timeout: "5"
           grubInstall: "grub-install"
@@ -312,6 +305,15 @@ jobs:
           grubProbe: "grub-probe"
           efiBootMgr: "efibootmgr"
           installEFI: true
+          canBeResized: true
+          allowManualPartitioning: true
+          EOF
+
+          # grubcfg modulu - FlOS icin
+          sudo tee /mnt/flos/etc/calamares/modules/grubcfg.conf > /dev/null << 'EOF'
+          overwrite: true
+          keepDistributor: false
+          distributor: "FlOS"
           EOF
 
       - name: Live Kullanici Olustur
