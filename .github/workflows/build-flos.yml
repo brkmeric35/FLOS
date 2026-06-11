@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "main", "master" ]
 
+# GitHub Sürümlerine dosya yükleyebilmek için yazma izni veriyoruz
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -92,9 +96,8 @@ jobs:
 
       - name: Debian Markasini Temizle
         run: |
-          sudo chroot /mnt/flos apt-get remove -y desktop-base 2>/dev/null || true
+          sudo apt-get remove -y desktop-base 2>/dev/null || true
           sudo rm -rf /mnt/flos/usr/share/desktop-base 2>/dev/null || true
-          # Varsayilan calamares kisayollarini kökten temizle (Debian'in kendi koyduklarini siler)
           sudo rm -f /mnt/flos/usr/share/applications/calamares.desktop 2>/dev/null || true
           sudo rm -f /mnt/flos/etc/skel/Desktop/calamares.desktop 2>/dev/null || true
 
@@ -461,9 +464,15 @@ jobs:
       - name: ISO Boyutunu Kontrol Et
         run: ls -lh FlOS-1-KDE.iso
 
-      - name: ISO Dosyasini Artifact Olarak Yukle
-        uses: actions/upload-artifact@v4
-        with:
-          name: FlOS-1-KDE-ISO
-          path: FlOS-1-KDE.iso
-          retention-days: 7
+      - name: Roket Hizinda Yukleme (GitHub Release)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Eski sürüm etiketi varsa temizle (Her seferinde üzerine yazması için)
+          gh release delete v1.0-canli --yes || true
+          
+          # Yeni sürümü hızlı dağıtım sunucularına fırlat
+          gh release create v1.0-canli FlOS-1-KDE.iso \
+            --title "FlOS 1 Canlı Dağıtım (ISO)" \
+            --notes "FlOS 1 Güncel Kararlı Kalıp Dosyası. Doğrudan yüksek hızlı CDN üzerinden iner." \
+            --prerelease
