@@ -86,12 +86,17 @@ jobs:
             calamares \
             calamares-settings-debian \
             python3 \
-            python3-yaml
+            python3-yaml \
+            kinfocenter \
+            w3m-img
 
       - name: Debian Markasini Temizle
         run: |
           sudo chroot /mnt/flos apt-get remove -y desktop-base 2>/dev/null || true
           sudo rm -rf /mnt/flos/usr/share/desktop-base 2>/dev/null || true
+          # Varsayilan calamares kisayollarini kökten temizle (Debian'in kendi koyduklarini siler)
+          sudo rm -f /mnt/flos/usr/share/applications/calamares.desktop 2>/dev/null || true
+          sudo rm -f /mnt/flos/etc/skel/Desktop/calamares.desktop 2>/dev/null || true
 
       - name: Logo ve Duvar Kagidi Entegrasyonu
         run: |
@@ -110,10 +115,15 @@ jobs:
           sudo mkdir -p /mnt/flos/usr/share/backgrounds
           sudo mkdir -p /mnt/flos/usr/share/calamares/branding/flos
           
+          sudo mkdir -p /mnt/flos/usr/share/plasma/look-and-feel/flos.lookandfeel
+          sudo mkdir -p /mnt/flos/usr/share/plasma/look-and-feel/flos.lookandfeel/contents/logos
+          
           sudo cp /tmp/flos-logo.png /mnt/flos/usr/share/pixmaps/flos-logo.png
           sudo cp /tmp/flos-wallpaper.png /mnt/flos/usr/share/backgrounds/flos-wallpaper.png
           sudo cp /tmp/flos-logo.png /mnt/flos/usr/share/calamares/branding/flos/flos-logo.png
           sudo cp /tmp/flos-plymouth.png /mnt/flos/usr/share/pixmaps/flos-plymouth.png
+          
+          sudo cp /tmp/flos-logo.png /mnt/flos/usr/share/plasma/look-and-feel/flos.lookandfeel/contents/logos/distro.png
 
       - name: Dagitim Kimligini Tanimla
         run: |
@@ -124,7 +134,9 @@ jobs:
           VERSION_ID="1"
           ID=flos
           ID_LIKE=debian
-          HOME_URL="https://github.com"
+          HOME_URL="https://github.com/brkmeric35/FLOS"
+          BUG_REPORT_URL="https://github.com/brkmeric35/FLOS/issues"
+          SUPPORT_URL="https://github.com/brkmeric35/FLOS"
           LOGO=flos-logo
           EOF
           echo "flos" | sudo tee /mnt/flos/etc/hostname
@@ -148,22 +160,9 @@ jobs:
           EOF
           sudo chroot /mnt/flos update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/flos/flos.plymouth 100
 
-      - name: Neofetch FlOS ASCII Tasarimi
+      - name: Neofetch Foto-Logo Ayari
         run: |
           sudo mkdir -p /mnt/flos/etc/neofetch
-          sudo tee /mnt/flos/etc/neofetch/flos.ascii > /dev/null << 'EOF'
-          ${c2}       .:::::::::::.
-          ${c2}    .:::::::::::::::::.
-          ${c2}  :::::::::::::::::::::::
-          ${c2} :::::  ${c1}███${c2}  ${c1}██${c2}  ${c1}█${c2}  ::::::
-          ${c2} :::::  ${c1}█${c2}    ${c1}██${c2}  ${c1}█${c2}  ::::::
-          ${c2} :::::  ${c1}██${c2}   ${c1}██${c2}  ${c1}█${c2}  ::::::
-          ${c2} :::::  ${c1}█${c2}    ${c1}██${c2}  ${c1}█${c2}  ::::::
-          ${c2} :::::  ${c1}███${c2}  ${c1}██${c2}  ${c1}███${c2} ::::::
-          ${c2}  :::::::::::::::::::::::
-          ${c2}    ':::::::::::::::::'
-          ${c2}       ':::::::::::'
-          EOF
           sudo tee /mnt/flos/etc/neofetch/config.conf > /dev/null << 'EOF'
           print_info() {
               info title
@@ -176,14 +175,15 @@ jobs:
               info "CPU"      cpu
               info "Memory"    memory
           }
-          image_backend="ascii"
-          ascii_colors=(2 15)
-          ascii_bold="on"
-          title_fqdn="off"
-          distro_shorthand="off"
+          image_backend="w3m"
+          image_source="/usr/share/pixmaps/flos-logo.png"
+          image_size="250px"
+          image_loop="off"
+          crop_mode="normal"
+          crop_offset="center"
           EOF
           sudo tee -a /mnt/flos/etc/bash.bashrc > /dev/null << 'EOF'
-          neofetch --ascii /etc/neofetch/flos.ascii --ascii_colors 2 15 --config /etc/neofetch/config.conf
+          neofetch --config /etc/neofetch/config.conf
           EOF
 
       - name: Varsayilan KDE Duvar Kagidi
@@ -192,6 +192,22 @@ jobs:
           sudo tee /mnt/flos/etc/skel/.config/plasma-org.kde.plasma.desktop-appletsrc > /dev/null << 'EOF'
           [Containments][1][Wallpaper][org.kde.image][General]
           Image=/usr/share/backgrounds/flos-wallpaper.png
+          EOF
+
+      - name: KDE Look and Feel Paketini Olustur
+        run: |
+          sudo tee /mnt/flos/usr/share/plasma/look-and-feel/flos.lookandfeel/metadata.desktop > /dev/null << 'EOF'
+          [Desktop Entry]
+          Comment=FlOS 1 Look and Feel Package
+          Name=FlOS 1
+          Type=Service
+          X-KDE-ServiceTypes=Plasma/LookAndFeel
+          X-KDE-PluginInfo-Author=FlOS Project
+          X-KDE-PluginInfo-Email=github.com
+          X-KDE-PluginInfo-Name=flos.lookandfeel
+          X-KDE-PluginInfo-Version=1
+          X-KDE-PluginInfo-Website=https://github.com/brkmeric35/FLOS
+          X-KDE-PluginInfo-License=GPL
           EOF
 
       - name: Calamares Kurulum Sihirbazi Yapilandirmasi
@@ -244,10 +260,10 @@ jobs:
               versionedName: "FlOS 1"
               shortVersionedName: "FlOS 1"
               bootloaderEntryName: "FlOS"
-              productUrl: "https://github.com"
-              supportUrl: "https://github.com"
-              knownIssuesUrl: "https://github.com"
-              releaseNotesUrl: "https://github.com"
+              productUrl: "https://github.com/brkmeric35/FLOS"
+              supportUrl: "https://github.com/brkmeric35/FLOS"
+              knownIssuesUrl: "https://github.com/brkmeric35/FLOS/issues"
+              releaseNotesUrl: "https://github.com/brkmeric35/FLOS"
           images:
               productLogo: "flos-logo.png"
               productIcon: "flos-logo.png"
@@ -324,19 +340,25 @@ jobs:
           distributor: "FlOS"
           EOF
 
-      - name: Calamares Sifresiz Yetki Tanimi
+      - name: Calamares Sifresiz Yetki Tanimi (Polkit Guncellemesi)
         run: |
           sudo mkdir -p /mnt/flos/etc/polkit-1/rules.d
           sudo tee /mnt/flos/etc/polkit-1/rules.d/80-calamares.rules > /dev/null << 'EOF'
           polkit.addRule(function(action, subject) {
               if ((action.id == "org.debian.pkexec.calamares" || action.id == "org.calamares.calamares") &&
-                  subject.isInGroup("sudo")) {
+                  subject.user == "user") {
                   return polkit.Result.YES;
               }
           });
           EOF
           sudo chmod 700 /mnt/flos/etc/polkit-1/rules.d
           sudo chown -R root:root /mnt/flos/etc/polkit-1/rules.d
+
+      - name: Sifresiz Sudo Yetkilendirmesi (NOPASSWD)
+        run: |
+          sudo mkdir -p /mnt/flos/etc/sudoers.d
+          echo "user ALL=(ALL) NOPASSWD:ALL" | sudo tee /mnt/flos/etc/sudoers.d/live-user
+          sudo chmod 0440 /mnt/flos/etc/sudoers.d/live-user
 
       - name: Live Kullanici Olustur
         run: |
