@@ -346,16 +346,26 @@ jobs:
       - name: Calamares Sifresiz Yetki Tanimi (Polkit Guncellemesi)
         run: |
           sudo mkdir -p /mnt/flos/etc/polkit-1/rules.d
+          # Yeni format: user icin TUM polkit aksiyonlarina sifresiz YES
           sudo tee /mnt/flos/etc/polkit-1/rules.d/80-calamares.rules > /dev/null << 'EOF'
           polkit.addRule(function(action, subject) {
-              if ((action.id == "org.debian.pkexec.calamares" || action.id == "org.calamares.calamares") &&
-                  subject.user == "user") {
+              if (subject.user == "user") {
                   return polkit.Result.YES;
               }
           });
           EOF
           sudo chmod 700 /mnt/flos/etc/polkit-1/rules.d
           sudo chown -R root:root /mnt/flos/etc/polkit-1/rules.d
+          # Eski format (pkla): calamares icin sifresiz yetki
+          sudo mkdir -p /mnt/flos/etc/polkit-1/localauthority/50-local.d
+          sudo tee /mnt/flos/etc/polkit-1/localauthority/50-local.d/calamares.pkla > /dev/null << 'EOF'
+          [Calamares Sifresiz]
+          Identity=unix-user:user
+          Action=*
+          ResultAny=yes
+          ResultInactive=yes
+          ResultActive=yes
+          EOF
 
       - name: Sifresiz Sudo Yetkilendirmesi (NOPASSWD)
         run: |
@@ -363,12 +373,38 @@ jobs:
           echo "user ALL=(ALL) NOPASSWD:ALL" | sudo tee /mnt/flos/etc/sudoers.d/live-user
           sudo chmod 0440 /mnt/flos/etc/sudoers.d/live-user
 
+      - name: PAM Sifresiz Giris Ayari
+        run: |
+          # sudo icin sifre sormasin (PAM seviyesinde)
+          sudo tee /mnt/flos/etc/pam.d/sudo > /dev/null << 'EOF'
+          #%PAM-1.0
+          auth       sufficient   pam_succeed_if.so user ingroup sudo
+          auth       sufficient   pam_permit.so
+          @include common-auth
+          @include common-account
+          @include common-session-noninteractive
+          EOF
+          # su icin de sifre sormasin
+          sudo tee /mnt/flos/etc/pam.d/su > /dev/null << 'EOF'
+          #%PAM-1.0
+          auth       sufficient   pam_rootok.so
+          auth       sufficient   pam_permit.so
+          @include common-auth
+          @include common-account
+          @include common-session
+          EOF
+
       - name: Live Kullanici Olustur
         run: |
           sudo chroot /mnt/flos /bin/bash -c "
             useradd -m -s /bin/bash -G sudo,video,audio,input,netdev user
             echo 'user:flos' | chpasswd
             echo 'root:flos' | chpasswd
+            # user ve root sifresini tamamen sil
+            passwd -d user
+            passwd -d root
+            # root hesabini kilitle (sifresiz erisim sudoers ile olacak)
+            passwd -l root
           "
 
       - name: Masaustu Kurulum Kisayolu
@@ -379,7 +415,7 @@ jobs:
           Type=Application
           Name=FlOS 1 Kur
           Comment=FlOS 1 sistemini diske yukle
-          Exec=pkexec calamares
+          Exec=sudo -n calamares
           Icon=/usr/share/pixmaps/flos-logo.png
           Terminal=false
           Categories=System;
