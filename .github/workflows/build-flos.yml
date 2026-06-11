@@ -19,16 +19,24 @@ jobs:
             debootstrap xorriso squashfs-tools \
             grub-pc-bin grub-efi-amd64-bin mtools isolinux syslinux-common imagemagick
 
-      - name: Debian Base Sistem
+      - name: Debian Base Sistem Oluştur
         run: |
           sudo debootstrap --arch=amd64 bookworm /mnt/flos http://deb.debian.org/debian
 
-      - name: Sources List
+      - name: Gelişmiş Sources List Ayarla
         run: |
           sudo tee /mnt/flos/etc/apt/sources.list > /dev/null << 'EOF'
           deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+          deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
           deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
           EOF
+
+      - name: Sanal Dosya Sistemlerini Bağla (Mount)
+        run: |
+          sudo mount --bind /dev /mnt/flos/dev
+          sudo mount --bind /dev/pts /mnt/flos/dev/pts
+          sudo mount -t proc proc /mnt/flos/proc
+          sudo mount -t sysfs sys /mnt/flos/sys
 
       - name: Temel Paketleri Kur
         run: |
@@ -57,7 +65,7 @@ jobs:
             os-prober \
             efibootmgr
 
-      - name: KDE Plasma Kur
+      - name: KDE Plasma ve Sistem Araçlarını Kur
         run: |
           sudo chroot /mnt/flos apt-get install -y \
             kde-plasma-desktop \
@@ -79,13 +87,18 @@ jobs:
             python3 \
             python3-yaml
 
-      - name: Debian Markasini Kaldir
+      - name: Debian Markasını Temizle
         run: |
           sudo chroot /mnt/flos apt-get remove -y desktop-base 2>/dev/null || true
           sudo rm -rf /mnt/flos/usr/share/desktop-base 2>/dev/null || true
 
-      - name: Logo ve Duvar Kagidi
+      - name: Logo ve Duvar Kağıdı Entegrasyonu
         run: |
+          # Eğer repoda flos-logo.png yoksa geçici bir logo üret
+          if [ ! -f flos-logo.png ]; then
+            convert -size 512x512 xc:transparent -gravity center -pointsize 80 -fill "#4CAF50" -draw "text 0,0 'FlOS'" flos-logo.png
+          fi
+          
           cp flos-logo.png /tmp/flos-logo.png
           convert -size 1920x1080 xc:#0d1117 \
             \( /tmp/flos-logo.png -resize 400x400 \) \
@@ -95,12 +108,13 @@ jobs:
           sudo mkdir -p /mnt/flos/usr/share/pixmaps
           sudo mkdir -p /mnt/flos/usr/share/backgrounds
           sudo mkdir -p /mnt/flos/usr/share/calamares/branding/flos
+          
           sudo cp /tmp/flos-logo.png /mnt/flos/usr/share/pixmaps/flos-logo.png
           sudo cp /tmp/flos-wallpaper.png /mnt/flos/usr/share/backgrounds/flos-wallpaper.png
           sudo cp /tmp/flos-logo.png /mnt/flos/usr/share/calamares/branding/flos/flos-logo.png
           sudo cp /tmp/flos-plymouth.png /mnt/flos/usr/share/pixmaps/flos-plymouth.png
 
-      - name: OS Adi FlOS 1
+      - name: Dağıtım Kimliğini Tanımla (FlOS 1)
         run: |
           sudo tee /mnt/flos/etc/os-release > /dev/null << 'EOF'
           PRETTY_NAME="FlOS 1"
@@ -115,7 +129,7 @@ jobs:
           echo "flos" | sudo tee /mnt/flos/etc/hostname
           printf '127.0.0.1\tlocalhost\n127.0.1.1\tflos\n' | sudo tee /mnt/flos/etc/hosts
 
-      - name: Plymouth Boot Splash
+      - name: Plymouth Açılış Ekranı Ayarla
         run: |
           sudo mkdir -p /mnt/flos/usr/share/plymouth/themes/flos
           sudo cp /tmp/flos-plymouth.png /mnt/flos/usr/share/plymouth/themes/flos/flos.png
@@ -131,11 +145,9 @@ jobs:
           s.SetX(Window.GetWidth() / 2 - 150);
           s.SetY(Window.GetHeight() / 2 - 150);
           EOF
-          sudo chroot /mnt/flos /bin/bash -c "
-            update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/flos/flos.plymouth 100 2>/dev/null || true
-          "
+          sudo chroot /mnt/flos update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/flos/flos.plymouth 100
 
-      - name: Neofetch FlOS ASCII Logo
+      - name: Neofetch FlOS ASCII Tasarımı
         run: |
           sudo mkdir -p /mnt/flos/etc/neofetch
           sudo tee /mnt/flos/etc/neofetch/flos.ascii > /dev/null << 'EOF'
@@ -155,13 +167,13 @@ jobs:
           print_info() {
               info title
               info underline
-              info "OS"       distro
-              info "Kernel"   kernel
-              info "Uptime"   uptime
+              info "OS"        distro
+              info "Kernel"    kernel
+              info "Uptime"    uptime
               info "Packages" packages
-              info "Shell"    shell
+              info "Shell"     shell
               info "CPU"      cpu
-              info "Memory"   memory
+              info "Memory"    memory
           }
           image_backend="ascii"
           ascii_colors=(2 15)
@@ -173,7 +185,7 @@ jobs:
           neofetch --ascii /etc/neofetch/flos.ascii --ascii_colors 2 15 --config /etc/neofetch/config.conf
           EOF
 
-      - name: KDE Duvar Kagidi
+      - name: Varsayılan KDE Duvar Kağıdı
         run: |
           sudo mkdir -p /mnt/flos/etc/skel/.config
           sudo tee /mnt/flos/etc/skel/.config/plasma-org.kde.plasma.desktop-appletsrc > /dev/null << 'EOF'
@@ -181,7 +193,7 @@ jobs:
           Image=/usr/share/backgrounds/flos-wallpaper.png
           EOF
 
-      - name: Calamares Yapilandir
+      - name: Calamares Kurulum Sihirbazı Yapılandırması
         run: |
           sudo mkdir -p /mnt/flos/etc/calamares/modules
 
@@ -311,7 +323,21 @@ jobs:
           distributor: "FlOS"
           EOF
 
-      - name: Live Kullanici Olustur
+      - name: Calamares Şifresiz Yetki (Polkit) Tanımı
+        run: |
+          sudo mkdir -p /mnt/flos/etc/polkit-1/rules.d
+          sudo tee /mnt/flos/etc/polkit-1/rules.d/80-calamares.rules > /dev/null << 'EOF'
+          polkit.addRule(function(action, subject) {
+              if ((action.id == "org.debian.pkexec.calamares" || action.id == "org.calamares.calamares") &&
+                  subject.isInGroup("sudo")) {
+                  return polkit.Result.YES;
+              }
+          });
+          EOF
+          sudo chmod 700 /mnt/flos/etc/polkit-1/rules.d
+          sudo chown -R root:root /mnt/flos/etc/polkit-1/rules.d
+
+      - name: Live Kullanıcı Oluştur (Şifre: flos)
         run: |
           sudo chroot /mnt/flos /bin/bash -c "
             useradd -m -s /bin/bash -G sudo,video,audio,input,netdev user
@@ -319,7 +345,7 @@ jobs:
             echo 'root:flos' | chpasswd
           "
 
-      - name: Masaustu Kurulum Kisayolu
+      - name: Masaüstü Kurulum Kısayolu
         run: |
           sudo mkdir -p /mnt/flos/home/user/Desktop
           sudo tee /mnt/flos/home/user/Desktop/install-flos.desktop > /dev/null << 'EOF'
@@ -335,7 +361,7 @@ jobs:
           sudo chmod +x /mnt/flos/home/user/Desktop/install-flos.desktop
           sudo chroot /mnt/flos chown -R user:user /home/user/Desktop
 
-      - name: SDDM Otomatik Giris
+      - name: SDDM Otomatik Giriş Ayarı
         run: |
           sudo mkdir -p /mnt/flos/etc/sddm.conf.d
           sudo tee /mnt/flos/etc/sddm.conf.d/autologin.conf > /dev/null << 'EOF'
@@ -344,7 +370,7 @@ jobs:
           Session=plasma
           EOF
 
-      - name: Klavye Ayari
+      - name: Türkçe Klavye Düzeni Ayarla
         run: |
           sudo mkdir -p /mnt/flos/etc/X11/xorg.conf.d
           sudo tee /mnt/flos/etc/X11/xorg.conf.d/00-keyboard.conf > /dev/null << 'EOF'
@@ -355,52 +381,64 @@ jobs:
           EndSection
           EOF
 
-      - name: Servisleri Etkinlestir
+      - name: Sistem Servislerini Aktifleştir
         run: |
           sudo chroot /mnt/flos systemctl enable sddm
           sudo chroot /mnt/flos systemctl enable NetworkManager
 
-      - name: Locale
+      - name: Sistem Dil (Locale) Ayarları
         run: |
           echo 'en_US.UTF-8 UTF-8' | sudo tee /mnt/flos/etc/locale.gen
           sudo chroot /mnt/flos locale-gen
           echo 'LANG=en_US.UTF-8' | sudo tee /mnt/flos/etc/locale.conf
 
-      - name: Initramfs Guncelle
+      - name: Initramfs Güncelle
         run: |
           sudo chroot /mnt/flos update-initramfs -u -k all
 
-      - name: ISO Dizin Yapisi
+      - name: Temizlik ve Disk Alanı Optimizasyonu
+        run: |
+          sudo chroot /mnt/flos apt-get clean
+          sudo rm -rf /mnt/flos/var/lib/apt/lists/*
+
+      - name: Sanal Dosya Sistemlerini Ayır (Unmount)
+        run: |
+          sudo umount -lf /mnt/flos/dev/pts || true
+          sudo umount -lf /mnt/flos/dev || true
+          sudo umount -lf /mnt/flos/proc || true
+          sudo umount -lf /mnt/flos/sys || true
+
+      - name: ISO Dizin Yapısı Oluştur
         run: mkdir -p iso_root/{live,boot/grub}
 
-      - name: SquashFS Olustur
+      - name: SquashFS Sıkıştırılmış İmajı Oluştur
         run: |
           sudo mksquashfs /mnt/flos iso_root/live/filesystem.squashfs \
-            -e boot -comp xz -noappend
+            -comp xz -noappend
 
-      - name: Kernel ve Initrd Kopyala
+      - name: Kernel ve Initrd Çekirdeklerini Kopyala
         run: |
           sudo cp $(ls /mnt/flos/boot/vmlinuz-* | sort | tail -1) iso_root/live/vmlinuz
           sudo cp $(ls /mnt/flos/boot/initrd.img-* | sort | tail -1) iso_root/live/initrd.img
 
-      - name: GRUB Config
+      - name: Canlı Sistem GRUB Menüsü Oluştur
         run: |
           sudo tee iso_root/boot/grub/grub.cfg > /dev/null << 'EOF'
           set default=0
           set timeout=5
-          menuentry "FlOS 1 - KDE Plasma" {
+          menuentry "FlOS 1 - KDE Plasma (Canli Sistem)" {
               linux  /live/vmlinuz boot=live components quiet splash
               initrd /live/initrd.img
           }
           EOF
 
-      - name: ISO Olustur
+      - name: Hibrit ISO İmajını Paketle
         run: sudo grub-mkrescue -o FlOS-1-KDE.iso iso_root
 
-      - name: ISO Boyutu
+      - name: ISO Boyutunu Kontrol Et
         run: ls -lh FlOS-1-KDE.iso
 
-      - name: ISO Yukle
+      - name: ISO Dosyasını Artifact Olarak Yükle
         uses: actions/upload-artifact@v4
         with:
           name: FlOS-1-KDE-ISO
