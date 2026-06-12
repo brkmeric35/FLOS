@@ -173,9 +173,9 @@ jobs:
               info "OS"        distro
               info "Kernel"    kernel
               info "Uptime"    uptime
-              info "Packages"  packages
+              info "Packages" packages
               info "Shell"     shell
-              info "CPU"       cpu
+              info "CPU"      cpu
               info "Memory"    memory
           }
           image_backend="w3m"
@@ -343,7 +343,7 @@ jobs:
           distributor: "FlOS"
           EOF
 
-          # Klavye varsayilani: Ingilizce Q (us)
+          # Keyboard layout remains English Q (us) as requested
           sudo tee /mnt/flos/etc/calamares/modules/keyboard.conf > /dev/null << 'EOF'
           keyboardLayout: "us"
           keyboardVariant: ""
@@ -351,10 +351,8 @@ jobs:
 
       - name: Calamares Sifresiz Wrapper Script
         run: |
-          # Calamares'i sifre sormadan root olarak calistiran wrapper
           sudo tee /mnt/flos/usr/local/bin/flos-install << 'EOF'
           #!/bin/bash
-          # FlOS Kurulum Baslatic - sifre gerektirmez
           exec sudo -n /usr/bin/calamares "$@"
           EOF
           sudo chmod +x /mnt/flos/usr/local/bin/flos-install
@@ -362,7 +360,6 @@ jobs:
       - name: Calamares Sifresiz Yetki Tanimi (Polkit)
         run: |
           sudo mkdir -p /mnt/flos/etc/polkit-1/rules.d
-          # user icin TUM polkit aksiyonlarina sifresiz YES
           sudo tee /mnt/flos/etc/polkit-1/rules.d/49-nopasswd-global.rules > /dev/null << 'EOF'
           polkit.addRule(function(action, subject) {
               if (subject.isInGroup("sudo")) {
@@ -370,9 +367,9 @@ jobs:
               }
           });
           EOF
-          sudo chmod 700 /mnt/flos/etc/polkit-1/rules.d
-          sudo chown -R root:root /mnt/flos/etc/polkit-1/rules.d
-          # Eski pkla formati
+          sudo chmod 644 /mnt/flos/etc/polkit-1/rules.d/49-nopasswd-global.rules
+          sudo chown root:root /mnt/flos/etc/polkit-1/rules.d/49-nopasswd-global.rules
+          
           sudo mkdir -p /mnt/flos/etc/polkit-1/localauthority/50-local.d
           sudo tee /mnt/flos/etc/polkit-1/localauthority/50-local.d/calamares.pkla > /dev/null << 'EOF'
           [Calamares Sifresiz]
@@ -386,13 +383,11 @@ jobs:
       - name: Sifresiz Sudo Yetkilendirmesi (NOPASSWD)
         run: |
           sudo mkdir -p /mnt/flos/etc/sudoers.d
-          # user icin tum komutlar sifresiz
           echo "user ALL=(ALL) NOPASSWD:ALL" | sudo tee /mnt/flos/etc/sudoers.d/live-user
           sudo chmod 0440 /mnt/flos/etc/sudoers.d/live-user
 
       - name: PAM Sifresiz Giris Ayari
         run: |
-          # sudo icin sifre sormasin (PAM seviyesinde)
           sudo tee /mnt/flos/etc/pam.d/sudo > /dev/null << 'EOF'
           #%PAM-1.0
           auth       sufficient   pam_succeed_if.so user ingroup sudo
@@ -401,7 +396,6 @@ jobs:
           @include common-account
           @include common-session-noninteractive
           EOF
-          # su icin de sifre sormasin
           sudo tee /mnt/flos/etc/pam.d/su > /dev/null << 'EOF'
           #%PAM-1.0
           auth       sufficient   pam_rootok.so
@@ -424,7 +418,6 @@ jobs:
 
       - name: Masaustu Sadece FlOS Kur Kisayolu
         run: |
-          # Onceki adimda temizlendi, simdi SADECE FlOS kur kisayolunu ekle
           sudo mkdir -p /mnt/flos/home/user/Desktop
           sudo tee /mnt/flos/home/user/Desktop/flos-kur.desktop > /dev/null << 'EOF'
           [Desktop Entry]
@@ -439,12 +432,10 @@ jobs:
           EOF
           sudo chmod +x /mnt/flos/home/user/Desktop/flos-kur.desktop
           sudo chroot /mnt/flos chown -R user:user /home/user/Desktop
-          # etc/skel icindeki tum kisayollari temizle (yeni kullanicilara gecmemesi icin)
           sudo rm -f /mnt/flos/etc/skel/Desktop/*.desktop 2>/dev/null || true
 
       - name: Ingilizce Q Klavye Live Sistem Ayari
         run: |
-          # X11 klavye: Ingilizce Q (us layout)
           sudo mkdir -p /mnt/flos/etc/X11/xorg.conf.d
           sudo tee /mnt/flos/etc/X11/xorg.conf.d/00-keyboard.conf > /dev/null << 'EOF'
           Section "InputClass"
@@ -454,7 +445,6 @@ jobs:
               Option "XkbVariant" ""
           EndSection
           EOF
-          # Konsol klavye ayari
           sudo tee /mnt/flos/etc/default/keyboard > /dev/null << 'EOF'
           XKBMODEL="pc105"
           XKBLAYOUT="us"
@@ -462,7 +452,6 @@ jobs:
           XKBOPTIONS=""
           BACKSPACE="guess"
           EOF
-          # KDE Plasma varsayilan klavye ayari (skel uzerinden yeni kullaniciya)
           sudo mkdir -p /mnt/flos/etc/skel/.config
           sudo tee /mnt/flos/etc/skel/.config/kxkbrc > /dev/null << 'EOF'
           [Layout]
@@ -538,12 +527,20 @@ jobs:
       - name: ISO Boyutunu Kontrol Et
         run: ls -lh FlOS-1-KDE.iso
 
-      - name: Roket Hizinda Yukleme (GitHub Release)
+      - name: Yukleme (GitHub Release)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 1. Eski sürümü kaldır
           gh release delete v1.0-canli --yes || true
+          
+          # 2. GitHub arayüzünü ve Git önbelleğini temizlemek için tag'leri kökten sil (Kritik adım)
+          git tag -d v1.0-canli 2>/dev/null || true
+          git push --delete origin v1.0-canli 2>/dev/null || true
+          
+          # 3. Sürümü Pre-release yap ama --latest ekleyerek ana sayfa bölmesine zorla iğnele
           gh release create v1.0-canli FlOS-1-KDE.iso \
             --title "FlOS 1 Canlı Dağıtım (ISO)" \
             --notes "FlOS 1 Güncel Kararlı Kalıp Dosyası. Doğrudan yüksek hızlı CDN üzerinden iner." \
-            --prerelease
+            --prerelease \
+            --latest
