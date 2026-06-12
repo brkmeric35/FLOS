@@ -4,7 +4,6 @@ on:
   push:
     branches: [ "main", "master" ]
 
-# GitHub Sürümlerine dosya yükleyebilmek için yazma izni veriyoruz
 permissions:
   contents: write
 
@@ -94,12 +93,16 @@ jobs:
             kinfocenter \
             w3m-img
 
-      - name: Debian Markasini Temizle
+      - name: Tum Masaustu Kisayollarini Temizle
         run: |
-          sudo apt-get remove -y desktop-base 2>/dev/null || true
-          sudo rm -rf /mnt/flos/usr/share/desktop-base 2>/dev/null || true
+          # Debian / sistem varsayilan kisayollarini tamamen sil
           sudo rm -f /mnt/flos/usr/share/applications/calamares.desktop 2>/dev/null || true
           sudo rm -f /mnt/flos/etc/skel/Desktop/calamares.desktop 2>/dev/null || true
+          sudo rm -f /mnt/flos/etc/skel/Desktop/*.desktop 2>/dev/null || true
+          sudo rm -rf /mnt/flos/usr/share/desktop-base 2>/dev/null || true
+          # Olasi diger installer kisayollari
+          sudo rm -f /mnt/flos/usr/share/applications/debian-installer*.desktop 2>/dev/null || true
+          sudo rm -f /mnt/flos/usr/share/applications/install-*.desktop 2>/dev/null || true
 
       - name: Logo ve Duvar Kagidi Entegrasyonu
         run: |
@@ -108,7 +111,6 @@ jobs:
           else
             cp flos-logo.png /tmp/flos-logo.png
           fi
-          
           convert -size 1920x1080 xc:#0d1117 \
             \( /tmp/flos-logo.png -resize 400x400 \) \
             -gravity center -composite /tmp/flos-wallpaper.png
@@ -117,15 +119,13 @@ jobs:
           sudo mkdir -p /mnt/flos/usr/share/pixmaps
           sudo mkdir -p /mnt/flos/usr/share/backgrounds
           sudo mkdir -p /mnt/flos/usr/share/calamares/branding/flos
-          
           sudo mkdir -p /mnt/flos/usr/share/plasma/look-and-feel/flos.lookandfeel
           sudo mkdir -p /mnt/flos/usr/share/plasma/look-and-feel/flos.lookandfeel/contents/logos
-          
+
           sudo cp /tmp/flos-logo.png /mnt/flos/usr/share/pixmaps/flos-logo.png
           sudo cp /tmp/flos-wallpaper.png /mnt/flos/usr/share/backgrounds/flos-wallpaper.png
           sudo cp /tmp/flos-logo.png /mnt/flos/usr/share/calamares/branding/flos/flos-logo.png
           sudo cp /tmp/flos-plymouth.png /mnt/flos/usr/share/pixmaps/flos-plymouth.png
-          
           sudo cp /tmp/flos-logo.png /mnt/flos/usr/share/plasma/look-and-feel/flos.lookandfeel/contents/logos/distro.png
 
       - name: Dagitim Kimligini Tanimla
@@ -173,9 +173,9 @@ jobs:
               info "OS"        distro
               info "Kernel"    kernel
               info "Uptime"    uptime
-              info "Packages" packages
+              info "Packages"  packages
               info "Shell"     shell
-              info "CPU"      cpu
+              info "CPU"       cpu
               info "Memory"    memory
           }
           image_backend="w3m"
@@ -343,20 +343,36 @@ jobs:
           distributor: "FlOS"
           EOF
 
-      - name: Calamares Sifresiz Yetki Tanimi (Polkit Guncellemesi)
+          # Klavye varsayilani: Ingilizce Q (us)
+          sudo tee /mnt/flos/etc/calamares/modules/keyboard.conf > /dev/null << 'EOF'
+          keyboardLayout: "us"
+          keyboardVariant: ""
+          EOF
+
+      - name: Calamares Sifresiz Wrapper Script
+        run: |
+          # Calamares'i sifre sormadan root olarak calistiran wrapper
+          sudo tee /mnt/flos/usr/local/bin/flos-install << 'EOF'
+          #!/bin/bash
+          # FlOS Kurulum Baslatic - sifre gerektirmez
+          exec sudo -n /usr/bin/calamares "$@"
+          EOF
+          sudo chmod +x /mnt/flos/usr/local/bin/flos-install
+
+      - name: Calamares Sifresiz Yetki Tanimi (Polkit)
         run: |
           sudo mkdir -p /mnt/flos/etc/polkit-1/rules.d
-          # Yeni format: user icin TUM polkit aksiyonlarina sifresiz YES
-          sudo tee /mnt/flos/etc/polkit-1/rules.d/80-calamares.rules > /dev/null << 'EOF'
+          # user icin TUM polkit aksiyonlarina sifresiz YES
+          sudo tee /mnt/flos/etc/polkit-1/rules.d/49-nopasswd-global.rules > /dev/null << 'EOF'
           polkit.addRule(function(action, subject) {
-              if (subject.user == "user") {
+              if (subject.isInGroup("sudo")) {
                   return polkit.Result.YES;
               }
           });
           EOF
           sudo chmod 700 /mnt/flos/etc/polkit-1/rules.d
           sudo chown -R root:root /mnt/flos/etc/polkit-1/rules.d
-          # Eski format (pkla): calamares icin sifresiz yetki
+          # Eski pkla formati
           sudo mkdir -p /mnt/flos/etc/polkit-1/localauthority/50-local.d
           sudo tee /mnt/flos/etc/polkit-1/localauthority/50-local.d/calamares.pkla > /dev/null << 'EOF'
           [Calamares Sifresiz]
@@ -370,6 +386,7 @@ jobs:
       - name: Sifresiz Sudo Yetkilendirmesi (NOPASSWD)
         run: |
           sudo mkdir -p /mnt/flos/etc/sudoers.d
+          # user icin tum komutlar sifresiz
           echo "user ALL=(ALL) NOPASSWD:ALL" | sudo tee /mnt/flos/etc/sudoers.d/live-user
           sudo chmod 0440 /mnt/flos/etc/sudoers.d/live-user
 
@@ -400,28 +417,60 @@ jobs:
             useradd -m -s /bin/bash -G sudo,video,audio,input,netdev user
             echo 'user:flos' | chpasswd
             echo 'root:flos' | chpasswd
-            # user ve root sifresini tamamen sil
             passwd -d user
             passwd -d root
-            # root hesabini kilitle (sifresiz erisim sudoers ile olacak)
             passwd -l root
           "
 
-      - name: Masaustu Kurulum Kisayolu
+      - name: Masaustu Sadece FlOS Kur Kisayolu
         run: |
+          # Onceki adimda temizlendi, simdi SADECE FlOS kur kisayolunu ekle
           sudo mkdir -p /mnt/flos/home/user/Desktop
-          sudo tee /mnt/flos/home/user/Desktop/install-flos.desktop > /dev/null << 'EOF'
+          sudo tee /mnt/flos/home/user/Desktop/flos-kur.desktop > /dev/null << 'EOF'
           [Desktop Entry]
           Type=Application
-          Name=FlOS 1 Kur
+          Name=FlOS Kur
           Comment=FlOS 1 sistemini diske yukle
-          Exec=sudo -n calamares
+          Exec=/usr/local/bin/flos-install
           Icon=/usr/share/pixmaps/flos-logo.png
           Terminal=false
           Categories=System;
+          X-KDE-SubstituteUID=false
           EOF
-          sudo chmod +x /mnt/flos/home/user/Desktop/install-flos.desktop
+          sudo chmod +x /mnt/flos/home/user/Desktop/flos-kur.desktop
           sudo chroot /mnt/flos chown -R user:user /home/user/Desktop
+          # etc/skel icindeki tum kisayollari temizle (yeni kullanicilara gecmemesi icin)
+          sudo rm -f /mnt/flos/etc/skel/Desktop/*.desktop 2>/dev/null || true
+
+      - name: Ingilizce Q Klavye Live Sistem Ayari
+        run: |
+          # X11 klavye: Ingilizce Q (us layout)
+          sudo mkdir -p /mnt/flos/etc/X11/xorg.conf.d
+          sudo tee /mnt/flos/etc/X11/xorg.conf.d/00-keyboard.conf > /dev/null << 'EOF'
+          Section "InputClass"
+              Identifier "keyboard"
+              MatchIsKeyboard "yes"
+              Option "XkbLayout" "us"
+              Option "XkbVariant" ""
+          EndSection
+          EOF
+          # Konsol klavye ayari
+          sudo tee /mnt/flos/etc/default/keyboard > /dev/null << 'EOF'
+          XKBMODEL="pc105"
+          XKBLAYOUT="us"
+          XKBVARIANT=""
+          XKBOPTIONS=""
+          BACKSPACE="guess"
+          EOF
+          # KDE Plasma varsayilan klavye ayari (skel uzerinden yeni kullaniciya)
+          sudo mkdir -p /mnt/flos/etc/skel/.config
+          sudo tee /mnt/flos/etc/skel/.config/kxkbrc > /dev/null << 'EOF'
+          [Layout]
+          DisplayNames=,
+          LayoutList=us
+          VariantList=
+          Use=true
+          EOF
 
       - name: SDDM Otomatik Giris Ayari
         run: |
@@ -430,17 +479,6 @@ jobs:
           [Autologin]
           User=user
           Session=plasma
-          EOF
-
-      - name: Turkce Klavye Duzeni Ayarla
-        run: |
-          sudo mkdir -p /mnt/flos/etc/X11/xorg.conf.d
-          sudo tee /mnt/flos/etc/X11/xorg.conf.d/00-keyboard.conf > /dev/null << 'EOF'
-          Section "InputClass"
-              Identifier "keyboard"
-              MatchIsKeyboard "yes"
-              Option "XkbLayout" "tr"
-          EndSection
           EOF
 
       - name: Sistem Servislerini Aktiflestir
@@ -504,10 +542,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Eski sürüm etiketi varsa temizle (Her seferinde üzerine yazması için)
           gh release delete v1.0-canli --yes || true
-          
-          # Yeni sürümü hızlı dağıtım sunucularına fırlat
           gh release create v1.0-canli FlOS-1-KDE.iso \
             --title "FlOS 1 Canlı Dağıtım (ISO)" \
             --notes "FlOS 1 Güncel Kararlı Kalıp Dosyası. Doğrudan yüksek hızlı CDN üzerinden iner." \
