@@ -525,6 +525,11 @@ jobs:
           echo "=== ISO Yapimi Basliyor ==="
           sudo grub-mkrescue -o FlOS-1-KDE.iso iso_root
           
+          # KRİTİK DÜZELTME: Dosya izinlerini normal kullaniciya (runner) devret
+          echo "=== Dosya Izinleri Duzenleniyor ==="
+          sudo chown runner:docker FlOS-1-KDE.iso
+          chmod 644 FlOS-1-KDE.iso
+          
           echo "=== ISO Olusma Durumu Kontrol Ediliyor ==="
           if [ -f FlOS-1-KDE.iso ]; then
             echo "Basarili: ISO dosyasi olusturuldu!"
@@ -547,8 +552,8 @@ jobs:
           # GitHub Actions hassasiyetini gevset
           set +e
           
-          # 2. Yeni benzersiz surumu olustur ve ISO'yu yukle
-          gh release create "${VERSION_TAG}" FlOS-1-KDE.iso \
+          # 2. Yeni benzersiz surumu olustur ve ISO'yu yukle (Yol tam olarak ./ ile belirtildi)
+          gh release create "${VERSION_TAG}" ./FlOS-1-KDE.iso \
             --title "FlOS 1 Canlı Dağıtım (${VERSION_TAG})" \
             --notes "FlOS 1 Kararlı Kalıp Dosyası. Sürüm: ${VERSION_TAG}. Doğrudan yüksek hızlı CDN üzerinden iner." \
             --prerelease \
