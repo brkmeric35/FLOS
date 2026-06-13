@@ -517,19 +517,21 @@ jobs:
           }
           EOF
 
+      # ════════════════════════════════════════════════
+      # DEĞİŞTİRİLDİ: chown runner:docker → $(whoami):$(id -gn)
+      # ════════════════════════════════════════════════
       - name: Hibrit ISO Imajini Paketle ve Kontrol Et
         run: |
           echo "=== ISO Klasor Yapisi Kontrol Ediliyor ==="
           ls -R iso_root
-          
+
           echo "=== ISO Yapimi Basliyor ==="
           sudo grub-mkrescue -o FlOS-1-KDE.iso iso_root
-          
-          # KRİTİK DÜZELTME: Dosya izinlerini normal kullaniciya (runner) devret
+
           echo "=== Dosya Izinleri Duzenleniyor ==="
-          sudo chown runner:docker FlOS-1-KDE.iso
+          sudo chown $(whoami):$(id -gn) FlOS-1-KDE.iso
           chmod 644 FlOS-1-KDE.iso
-          
+
           echo "=== ISO Olusma Durumu Kontrol Ediliyor ==="
           if [ -f FlOS-1-KDE.iso ]; then
             echo "Basarili: ISO dosyasi olusturuldu!"
@@ -539,24 +541,18 @@ jobs:
             exit 1
           fi
 
-      - name: Roket Hizinda Yukleme (GitHub Release)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 1. Otomatik sirali versiyon numarasini ata (v0.1.0, v0.1.1, v0.1.2 ...)
-          RUN_NUM=$(( ${{ github.run_number }} - 1 ))
-          VERSION_TAG="v0.1.${RUN_NUM}"
-          
-          echo "Olusturulacak Yeni Surum Etiketi: ${VERSION_TAG}"
-          
-          # GitHub Actions hassasiyetini gevset
-          set +e
-          
-          # 2. Yeni benzersiz surumu olustur ve ISO'yu yukle (Yol tam olarak ./ ile belirtildi)
-          gh release create "${VERSION_TAG}" ./FlOS-1-KDE.iso \
-            --title "FlOS 1 Canlı Dağıtım (${VERSION_TAG})" \
-            --notes "FlOS 1 Kararlı Kalıp Dosyası. Sürüm: ${VERSION_TAG}. Doğrudan yüksek hızlı CDN üzerinden iner." \
-            --prerelease \
-            --latest
-            
-          set -e
+      # ════════════════════════════════════════════════
+      # DEĞİŞTİRİLDİ: gh release create (set+e ile hata yutuyordu)
+      #              → softprops/action-gh-release@v2
+      # ════════════════════════════════════════════════
+      - name: GitHub Release Olustur ve ISO Yukle
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v0.1.${{ github.run_number }}"
+          name: "FlOS 1 Canlı Dağıtım (v0.1.${{ github.run_number }})"
+          body: |
+            FlOS 1 Kararlı Kalıp Dosyası
+            Sürüm: v0.1.${{ github.run_number }}
+            Doğrudan yüksek hızlı CDN üzerinden iner.
+          prerelease: true
+          files: FlOS-1-KDE.iso
