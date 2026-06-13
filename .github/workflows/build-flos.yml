@@ -173,9 +173,9 @@ jobs:
               info "OS"        distro
               info "Kernel"    kernel
               info "Uptime"    uptime
-              info "Packages" packages
+              info "Packages"  packages
               info "Shell"     shell
-              info "CPU"      cpu
+              info "CPU"       cpu
               info "Memory"    memory
           }
           image_backend="w3m"
@@ -343,7 +343,6 @@ jobs:
           distributor: "FlOS"
           EOF
 
-          # Keyboard layout remains English Q (us) as requested
           sudo tee /mnt/flos/etc/calamares/modules/keyboard.conf > /dev/null << 'EOF'
           keyboardLayout: "us"
           keyboardVariant: ""
@@ -367,9 +366,8 @@ jobs:
               }
           });
           EOF
-          sudo chmod 644 /mnt/flos/etc/polkit-1/rules.d/49-nopasswd-global.rules
-          sudo chown root:root /mnt/flos/etc/polkit-1/rules.d/49-nopasswd-global.rules
-          
+          sudo chmod 700 /mnt/flos/etc/polkit-1/rules.d
+          sudo chown -R root:root /mnt/flos/etc/polkit-1/rules.d
           sudo mkdir -p /mnt/flos/etc/polkit-1/localauthority/50-local.d
           sudo tee /mnt/flos/etc/polkit-1/localauthority/50-local.d/calamares.pkla > /dev/null << 'EOF'
           [Calamares Sifresiz]
@@ -527,18 +525,17 @@ jobs:
       - name: ISO Boyutunu Kontrol Et
         run: ls -lh FlOS-1-KDE.iso
 
-      - name: Yukleme (GitHub Release)
+      - name: Roket Hizinda Yukleme (GitHub Release)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 1. Eski sürümü kaldır
-          gh release delete v1.0-canli --yes || true
+          # 1. Eski sürümü sildirirken --cleanup-tag parametresiyle uzak sunucudaki Git tag'ini de API üzerinden tertemiz et
+          gh release delete v1.0-canli --yes --cleanup-tag 2>/dev/null || true
           
-          # 2. GitHub arayüzünü ve Git önbelleğini temizlemek için tag'leri kökten sil (Kritik adım)
+          # 2. Çalışma alanındaki yerel tag kalıntısı varsa kaldır
           git tag -d v1.0-canli 2>/dev/null || true
-          git push --delete origin v1.0-canli 2>/dev/null || true
           
-          # 3. Sürümü Pre-release yap ama --latest ekleyerek ana sayfa bölmesine zorla iğnele
+          # 3. Sürümü oluştur, --latest sayesinde ana sayfadaki "Releases" alanına kilitlenecektir
           gh release create v1.0-canli FlOS-1-KDE.iso \
             --title "FlOS 1 Canlı Dağıtım (ISO)" \
             --notes "FlOS 1 Güncel Kararlı Kalıp Dosyası. Doğrudan yüksek hızlı CDN üzerinden iner." \
