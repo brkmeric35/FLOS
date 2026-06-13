@@ -523,19 +523,24 @@ jobs:
         run: sudo grub-mkrescue -o FlOS-1-KDE.iso iso_root
 
       - name: ISO Boyutunu Kontrol Et
-        run: ls -lh FlOS-1-KDE.iso
-
+        run: ls -lh FlOS-1-KDE.iso-
       - name: Roket Hizinda Yukleme (GitHub Release)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 1. Eski sürümü sildirirken --cleanup-tag parametresiyle uzak sunucudaki Git tag'ini de API üzerinden tertemiz et
-          gh release delete v1.0-canli --yes --cleanup-tag 2>/dev/null || true
+          # 1. Uzak sunucuda bu isimde bir release var mı kontrol et, varsa sil
+          if gh release view v1.0-canli >/dev/null 2>&1; then
+            echo "Eski release bulundu, temizleniyor..."
+            gh release delete v1.0-canli --yes --cleanup-tag
+          else
+            echo "Eski bir release bulunmadi, temizlik adimi atlaniyor."
+          fi
           
-          # 2. Çalışma alanındaki yerel tag kalıntısı varsa kaldır
-          git tag -d v1.0-canli 2>/dev/null || true
+          # 2. Yerel tag kalintisi varsa sessizce temizle (hata vermemesi icin || true)
+          git tag -d v1.0-canli >/dev/null 2>&1 || true
           
-          # 3. Sürümü oluştur, --latest sayesinde ana sayfadaki "Releases" alanına kilitlenecektir
+          # 3. ISO'yu yukle ve yeni guncel release'i olustur
+          echo "Yeni ISO yukleniyor..."
           gh release create v1.0-canli FlOS-1-KDE.iso \
             --title "FlOS 1 Canlı Dağıtım (ISO)" \
             --notes "FlOS 1 Güncel Kararlı Kalıp Dosyası. Doğrudan yüksek hızlı CDN üzerinden iner." \
